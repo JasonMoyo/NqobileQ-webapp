@@ -2,10 +2,7 @@ pipeline {
     agent { label 'docker-agent' }
 
     triggers {
-        // Automatically build when GitHub receives a push
         githubPush()
-        
-        // Backup: Check for changes every 5 minutes (optional)
         pollSCM('H/5 * * * *')
     }
 
@@ -23,7 +20,7 @@ pipeline {
         DB_PASSWORD = credentials('db-password')
         DB_ROOT_PASSWORD = credentials('db-root-password')
         
-        AGENT_IP = '172.31.46.92'
+        // No hardcoded IP here - will be detected dynamically
         AGENT_PATH = '/home/ubuntu/nqobileq'
     }
 
@@ -33,9 +30,19 @@ pipeline {
                 echo '📦 Cloning code from GitHub...'
                 git url: 'https://github.com/JasonMoyo/NqobileQ-webapp.git', branch: 'main'
                 echo '✅ Code cloned successfully'
-                
-                // Show what changed (optional)
                 sh 'git log -1 --oneline'
+            }
+        }
+
+        stage('Detect Public IP') {
+            steps {
+                echo '🔍 Detecting public IP address...'
+                script {
+                    // Auto-detect public IP using multiple services (fallback)
+                    def public_ip = sh(script: 'curl -s ifconfig.me || curl -s icanhazip.com || curl -s ipinfo.io/ip', returnStdout: true).trim()
+                    env.AGENT_IP = public_ip
+                    echo "✅ Detected public IP: ${env.AGENT_IP}"
+                }
             }
         }
 
@@ -52,7 +59,7 @@ SMTP_PORT=587
 SMTP_USERNAME=${SMTP_USERNAME}
 SMTP_PASSWORD=${SMTP_PASSWORD}
 SMTP_SECURE=tls
-SITE_URL=http://${AGENT_IP}
+SITE_URL=http://${env.AGENT_IP}
 APP_ENV=production
 OWNER_PHONE=+27782280408
 OWNER_EMAIL=${OWNER_EMAIL}
@@ -63,29 +70,28 @@ STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
             }
         }
 
-        // Add this after "Create Environment File" stage
-stage('Verify Composer Dependencies') {
-    steps {
-        echo '📦 Verifying composer.json...'
-        sh '''
-            if [ -f composer.json ]; then
-                echo "✅ composer.json found"
-                cat composer.json | grep -E "phpmailer|stripe|vlucas" || echo "⚠️ Check dependencies"
-            else
-                echo "❌ composer.json not found!"
-                exit 1
-            fi
-        '''
-    }
-}
+        stage('Verify Composer Dependencies') {
+            steps {
+                echo '📦 Verifying composer.json...'
+                sh '''
+                    if [ -f composer.json ]; then
+                        echo "✅ composer.json found"
+                        cat composer.json | grep -E "phpmailer|stripe|vlucas" || echo "⚠️ Check dependencies"
+                    else
+                        echo "❌ composer.json not found!"
+                        exit 1
+                    fi
+                '''
+            }
+        }
 
         stage('Configure Stripe') {
             steps {
                 echo '💳 Configuring Stripe...'
                 sh """
                     if [ -f stripe-config.php ]; then
-                        sed -i 's|http://YOUR_EC2_PUBLIC_IP|http://${AGENT_IP}|g' stripe-config.php
-                        echo "✅ Stripe configured"
+                        sed -i 's|http://YOUR_EC2_PUBLIC_IP|http://${env.AGENT_IP}|g' stripe-config.php
+                        echo "✅ Stripe configured with IP: ${env.AGENT_IP}"
                     fi
                 """
             }
@@ -149,7 +155,7 @@ stage('Verify Composer Dependencies') {
                     echo "=========================================="
                     echo "✅ DEPLOYMENT SUCCESSFUL!"
                     echo "=========================================="
-                    echo "Website: http://${AGENT_IP}"
+                    echo "Website: http://${env.AGENT_IP}"
                     echo "Admin: admin@nqobileq.com / admin123"
                     echo "=========================================="
                 """
@@ -160,6 +166,7 @@ stage('Verify Composer Dependencies') {
     post {
         success {
             echo '🎉 PIPELINE TRIGGERED BY GITHUB PUSH - DEPLOYMENT SUCCESSFUL! 🎉'
+            echo "🌐 Website available at: http://${env.AGENT_IP}"
         }
         failure {
             echo '❌ PIPELINE FAILED!'
