@@ -1,99 +1,38 @@
 pipeline {
-    agent any
+    // Run directly on the agent (not via SSH)
+    agent { label 'docker-agent' }
 
     environment {
-        // Application
         APP_NAME = 'nqobileq'
-        
-        // EC2 Agent Configuration (UPDATE THESE)
-        AGENT_IP = '172.31.46.92'        // Your agent PRIVATE IP
-        AGENT_USER = 'ubuntu'
-        AGENT_PATH = '/home/ubuntu/nqobileq'
         
         // Jenkins Credentials (Add these in Jenkins UI)
         SMTP_USERNAME = credentials('smtp-username')
         SMTP_PASSWORD = credentials('smtp-password')
         OWNER_EMAIL = credentials('owner-email')
         
-        // Stripe Credentials
         STRIPE_PUBLISHABLE_KEY = credentials('stripe-publishable-key')
         STRIPE_SECRET_KEY = credentials('stripe-secret-key')
         
-        // Database Credentials
         DB_PASSWORD = credentials('db-password')
         DB_ROOT_PASSWORD = credentials('db-root-password')
+        
+        AGENT_IP = '172.31.46.92'
+        AGENT_PATH = '/home/ubuntu/nqobileq'
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                echo '📦 Checking out code from GitHub...'
-                git url: 'https://github.com/JasonMoyo/Nq-web.git', branch: 'main'
-                echo '✅ Code checked out successfully'
+                echo '📦 Checking out code...'
+                git url: 'https://github.com/JasonMoyo/NqobileQ-webapp.git', branch: 'main'
+                echo '✅ Code checked out'
             }
         }
 
         stage('Create .env File') {
             steps {
                 echo '🔧 Creating .env file...'
-                script {
-                    writeFile file: '.env', text: """# Database Configuration
-DB_HOST=db
-DB_USER=nqobileq_user
-DB_PASSWORD=${env.DB_PASSWORD}
-DB_NAME=nqobileq_db
-DB_ROOT_PASSWORD=${env.DB_ROOT_PASSWORD}
-
-# Email Configuration
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=${env.SMTP_USERNAME}
-SMTP_PASSWORD=${env.SMTP_PASSWORD}
-SMTP_SECURE=tls
-
-# Site Configuration
-SITE_URL=http://${env.AGENT_IP}
-APP_ENV=production
-
-# Contact Info
-OWNER_PHONE=+27782280408
-OWNER_EMAIL=${env.OWNER_EMAIL}
-
-# Stripe Configuration
-STRIPE_PUBLISHABLE_KEY=${env.STRIPE_PUBLISHABLE_KEY}
-STRIPE_SECRET_KEY=${env.STRIPE_SECRET_KEY}
-"""
-                }
-                sh 'echo "✅ .env file created"'
-            }
-        }
-
-        stage('Update Stripe Config') {
-            steps {
-                echo '🔧 Updating stripe-config.php for AWS...'
-                sh """
-                    # Update the domain in stripe-config.php
-                    sed -i 's|http://YOUR_EC2_PUBLIC_IP|http://${AGENT_IP}|g' stripe-config.php 2>/dev/null || true
-                    echo "✅ Stripe config updated"
-                """
-            }
-        }
-
-        stage('Deploy to Agent EC2') {
-            steps {
-                echo '🚀 Deploying to Agent EC2...'
-                sh """
-                    ssh -o StrictHostKeyChecking=no ${AGENT_USER}@${AGENT_IP} << 'ENDSSH'
-                        echo "📁 Setting up directory..."
-                        mkdir -p ${AGENT_PATH}
-                        cd ${AGENT_PATH}
-                        
-                        echo "📦 Pulling latest code..."
-                        git pull origin main 2>/dev/null || git clone https://github.com/JasonMoyo/Nq-web.git .
-                        
-                        echo "🔧 Creating .env file on agent..."
-                        cat > .env << 'EOF'
-DB_HOST=db
+                writeFile file: '.env', text: """DB_HOST=db
 DB_USER=nqobileq_user
 DB_PASSWORD=${DB_PASSWORD}
 DB_NAME=nqobileq_db
@@ -109,33 +48,75 @@ OWNER_PHONE=+27782280408
 OWNER_EMAIL=${OWNER_EMAIL}
 STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-EOF
-                        
-                        echo "🔧 Updating stripe-config.php..."
-                        sed -i "s|http://localhost|http://${AGENT_IP}|g" stripe-config.php 2>/dev/null || true
-                        
-                        echo "🐳 Stopping old containers..."
-                        docker-compose down || true
-                        
-                        echo "🐳 Building and starting containers..."
-                        docker-compose build --no-cache
-                        docker-compose up -d
-                        
-                        echo "⏳ Waiting for database to be ready..."
-                        sleep 15
-                        
-                        echo "🗄️ Initializing database..."
-                        docker exec -i nqobileq_db mysql -uroot -p${DB_ROOT_PASSWORD} nqobileq_db < init.sql 2>/dev/null || true
-                        
-                        echo "📋 Copying .env to web container..."
-                        docker cp .env nqobileq_web:/var/www/html/.env 2>/dev/null || true
-                        docker exec nqobileq_web chown www-data:www-data /var/www/html/.env 2>/dev/null || true
-                        
-                        echo "✅ Deployment complete on agent"
-                        
-                        echo "📊 Container status:"
-                        docker-compose ps
-                    ENDSSH
+"""
+                sh 'echo "✅ .env created"'
+            }
+        }
+
+        stage('Update Stripe Config') {
+            steps {
+                echo '🔧 Updating Stripe config...'
+                sh """
+                    if [ -f stripe-config.php ]; then
+                        sed -i 's|http://YOUR_EC2_PUBLIC_IP|http://${AGENT_IP}|g' stripe-config.php
+                        echo "✅ Stripe config updated"
+                    else
+                        echo "⚠️ stripe-config.php not found"
+                    fi
+                """
+            }
+        }
+
+        stage('Copy to Application Directory') {
+            steps {
+                echo '📁 Copying files to application directory...'
+                sh """
+                    mkdir -p ${AGENT_PATH}
+                    cp -r * ${AGENT_PATH}/ || true
+                    cp -r .[!.]* ${AGENT_PATH}/ 2>/dev/null || true
+                    cd ${AGENT_PATH}
+                    ls -la
+                """
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            steps {
+                echo '🐳 Deploying with Docker Compose...'
+                sh """
+                    cd ${AGENT_PATH}
+                    
+                    # Stop old containers
+                    docker-compose down 2>/dev/null || true
+                    
+                    # Build and start
+                    docker-compose build --no-cache
+                    docker-compose up -d
+                    
+                    echo "Waiting for containers to start..."
+                    sleep 15
+                    
+                    # Show running containers
+                    docker-compose ps
+                """
+            }
+        }
+
+        stage('Initialize Database') {
+            steps {
+                echo '🗄️ Initializing database...'
+                sh """
+                    cd ${AGENT_PATH}
+                    # Wait for MySQL to be ready
+                    sleep 10
+                    
+                    # Run init script
+                    docker exec -i nqobileq_db mysql -uroot -p${DB_ROOT_PASSWORD} nqobileq_db < init.sql 2>/dev/null || echo "Database already initialized or continuing..."
+                    
+                    # Copy .env to web container
+                    docker cp .env nqobileq_web:/var/www/html/.env 2>/dev/null || true
+                    
+                    echo "✅ Database initialization complete"
                 """
             }
         }
@@ -146,31 +127,19 @@ EOF
                 sh """
                     echo "=========================================="
                     echo "Testing website..."
-                    curl -s -f http://${AGENT_IP} > /dev/null && echo "✅ Website is running" || echo "⚠️ Website may not be ready"
+                    curl -s -f http://localhost:80 > /dev/null && echo "✅ Website is running" || echo "⚠️ Website may not be ready"
                     
                     echo "Testing phpMyAdmin..."
-                    curl -s -f http://${AGENT_IP}:8081 > /dev/null && echo "✅ phpMyAdmin is running" || echo "⚠️ phpMyAdmin may not be ready"
-                    
-                    echo "Testing Stripe checkout..."
-                    curl -s -f http://${AGENT_IP}/stripe-checkout.php > /dev/null && echo "✅ Stripe checkout page accessible" || echo "⚠️ Stripe page check skipped"
+                    curl -s -f http://localhost:8081 > /dev/null && echo "✅ phpMyAdmin is running" || echo "⚠️ phpMyAdmin may not be ready"
                     
                     echo "=========================================="
                     echo "✅ NQOBILEQ DEPLOYMENT SUCCESSFUL!"
                     echo "=========================================="
+                    echo "Website: http://${AGENT_IP}"
+                    echo "phpMyAdmin: http://${AGENT_IP}:8081"
                     echo ""
-                    echo "📱 ACCESS YOUR APPLICATION:"
-                    echo "   Website: http://${AGENT_IP}"
-                    echo "   phpMyAdmin: http://${AGENT_IP}:8081"
-                    echo "   Stripe Test: http://${AGENT_IP}/stripe-checkout.php"
-                    echo ""
-                    echo "🔐 ADMIN LOGIN:"
-                    echo "   Email: admin@nqobileq.com"
-                    echo "   Password: admin123"
-                    echo ""
-                    echo "💳 TEST STRIPE CARD:"
-                    echo "   Card: 4242 4242 4242 4242"
-                    echo "   Expiry: 12/28"
-                    echo "   CVC: 123"
+                    echo "Admin Login: admin@nqobileq.com / admin123"
+                    echo "Test Stripe Card: 4242 4242 4242 4242"
                     echo "=========================================="
                 """
             }
@@ -180,36 +149,14 @@ EOF
     post {
         success {
             echo '🎉 DEPLOYMENT SUCCESSFUL! 🎉'
-            emailext (
-                subject: "✅ NqobileQ Deployment Successful - Build #${env.BUILD_NUMBER}",
-                body: """
-                    NqobileQ Deployment Successful!
-                    
-                    Build Number: ${env.BUILD_NUMBER}
-                    Website: http://${env.AGENT_IP}
-                    phpMyAdmin: http://${env.AGENT_IP}:8081
-                    
-                    Stripe is configured for test payments.
-                    Use test card: 4242 4242 4242 4242
-                """,
-                to: "${env.OWNER_EMAIL}"
-            )
         }
         failure {
             echo '❌ DEPLOYMENT FAILED!'
-            sh """
-                echo "Fetching logs from agent..."
-                ssh -o StrictHostKeyChecking=no ${AGENT_USER}@${AGENT_IP} 'cd ${AGENT_PATH} && docker-compose logs --tail=50' || true
-            """
-            emailext (
-                subject: "❌ NqobileQ Deployment Failed - Build #${env.BUILD_NUMBER}",
-                body: "Deployment Failed! Check Jenkins console for details.",
-                to: "${env.OWNER_EMAIL}"
-            )
+            sh 'docker-compose logs --tail=50 2>/dev/null || true'
         }
         always {
             echo '🧹 Cleaning up...'
-            sh 'docker system prune -f || true'
+            sh 'docker system prune -f 2>/dev/null || true'
         }
     }
 }
