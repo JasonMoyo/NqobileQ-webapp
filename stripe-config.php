@@ -1,14 +1,8 @@
 <?php
-// stripe-config.php - NO HARDCODED KEYS!
-
-// Use Composer autoloader (recommended)
+// stripe-config.php
 require_once __DIR__ . '/vendor/autoload.php';
 
-// ============================================
-// IMPORTANT: Keys come from ENVIRONMENT VARIABLES only!
-// NEVER hardcode keys in files that go to GitHub
-// ============================================
-
+// Get keys from environment variables
 $publishable_key = getenv('STRIPE_PUBLISHABLE_KEY');
 $secret_key = getenv('STRIPE_SECRET_KEY');
 
@@ -21,7 +15,9 @@ define('STRIPE_SECRET_KEY', $secret_key);
 
 \Stripe\Stripe::setApiKey(STRIPE_SECRET_KEY);
 
-// Auto-detect domain
+// ============================================
+// FIX: Use auto-detection like config.php!
+// ============================================
 $domain = getenv('SITE_URL');
 if (empty($domain)) {
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
@@ -30,7 +26,7 @@ if (empty($domain)) {
 }
 $YOUR_DOMAIN = $domain;
 
-// Enable error reporting for debugging (disable in production)
+// Enable error reporting for debugging
 if (getenv('APP_ENV') === 'development') {
     error_reporting(E_ALL);
     ini_set('display_errors', 1);
