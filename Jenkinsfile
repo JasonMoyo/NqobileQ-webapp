@@ -54,6 +54,22 @@ STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
             }
         }
 
+        // Add this after "Create Environment File" stage
+stage('Verify Composer Dependencies') {
+    steps {
+        echo '📦 Verifying composer.json...'
+        sh '''
+            if [ -f composer.json ]; then
+                echo "✅ composer.json found"
+                cat composer.json | grep -E "phpmailer|stripe|vlucas" || echo "⚠️ Check dependencies"
+            else
+                echo "❌ composer.json not found!"
+                exit 1
+            fi
+        '''
+    }
+}
+
         // STAGE 3: Configure Stripe
         stage('Configure Stripe') {
             steps {

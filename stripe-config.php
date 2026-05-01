@@ -1,7 +1,8 @@
 <?php
 // stripe-config.php - NO HARDCODED KEYS!
 
-require_once __DIR__ . '/stripe-php/init.php';
+// Use Composer autoloader (recommended)
+require_once __DIR__ . '/vendor/autoload.php';
 
 // ============================================
 // IMPORTANT: Keys come from ENVIRONMENT VARIABLES only!
@@ -24,11 +25,14 @@ define('STRIPE_SECRET_KEY', $secret_key);
 $domain = getenv('SITE_URL');
 if (empty($domain)) {
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-    $host = $_SERVER['HTTP_HOST'];
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $domain = $protocol . $host;
 }
 $YOUR_DOMAIN = $domain;
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// Enable error reporting for debugging (disable in production)
+if (getenv('APP_ENV') === 'development') {
+    error_reporting(E_ALL);
+    ini_set('display_errors', 1);
+}
 ?>
