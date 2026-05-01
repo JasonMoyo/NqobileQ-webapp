@@ -1,0 +1,17 @@
+# Apache 2.4 syntax for protecting .env file
+<Files .env>
+    Require all denied
+</Files>
+
+# Protect other sensitive files
+<FilesMatch "\.(env|example|log|sql|ini|bak|backup|config|dist)$">
+    Require all denied
+</FilesMatch>
+
+# Disable directory browsing
+Options -Indexes
+
+# Protect .htaccess itself
+<Files .htaccess>
+    Require all denied
+</Files>

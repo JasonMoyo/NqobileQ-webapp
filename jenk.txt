@@ -1,0 +1,115 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_NAME = 'nqobileq'
+        COMPOSE_FILE = 'docker-compose.yml'
+        
+        SMTP_USERNAME = credentials('smtp-username')
+        SMTP_PASSWORD = credentials('smtp-password')
+        OWNER_EMAIL = credentials('owner-email')
+    }
+
+    stages {
+
+        stage('Fix Permissions') {
+            steps {
+                echo '🔧 Fixing workspace permissions...'
+                sh '''
+                    # Fix current workspace
+                    chmod -R 755 . 2>/dev/null || true
+                    rm -f .git/config.lock .git/index.lock 2>/dev/null || true
+                    
+                    # Ensure we can write to workspace
+                    touch .test_write && rm .test_write 2>/dev/null || {
+                        echo "Permission issue detected, cleaning workspace..."
+                        cd ..
+                        rm -rf NqoQ
+                        mkdir -p NqoQ
+                        cd NqoQ
+                    }
+                    echo "✅ Permissions ready"
+                '''
+            }
+        }
+
+        stage('Clone Fresh Repository') {
+            steps {
+                echo '📦 Cloning fresh repository...'
+                sh '''
+                    # Fresh clone (avoids lock issues)
+                    cd /var/lib/jenkins/workspace
+                    rm -rf NqoQ
+                    git clone https://github.com/JasonMoyo/Nq-web.git NqoQ
+                    cd NqoQ
+                    echo "✅ Repository cloned"
+                '''
+            }
+        }
+
+        stage('Create .env File') {
+            steps {
+                echo '🔧 Creating .env file...'
+                script {
+                    writeFile file: '.env', text: """DB_HOST=db
+DB_USER=nqobileq_user
+DB_PASSWORD=userpassword123
+DB_NAME=nqobileq_db
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=${env.SMTP_USERNAME}
+SMTP_PASSWORD=${env.SMTP_PASSWORD}
+SMTP_SECURE=tls
+SITE_URL=http://13.205.187.75
+APP_ENV=production
+OWNER_PHONE=+27782280408
+OWNER_EMAIL=${env.OWNER_EMAIL}
+"""
+                }
+                sh 'echo "✅ .env created"'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo '🚀 Deploying...'
+                sh '''
+                    docker-compose down || true
+                    docker-compose build --no-cache
+                    docker-compose up -d
+                    sleep 10
+                    docker cp .env nqobileq_web:/var/www/html/.env 2>/dev/null || true
+                    docker exec nqobileq_web chown www-data:www-data /var/www/html/.env 2>/dev/null || true
+                    echo "✅ Deployment complete"
+                '''
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh '''
+                    echo "Testing website..."
+                    curl -s -f http://localhost > /dev/null && echo "✅ Web running"
+                    
+                    echo "=========================================="
+                    echo "✅ NQOBILEQ DEPLOYMENT SUCCESSFUL!"
+                    echo "=========================================="
+                    echo "Website: http://13.205.187.75"
+                    echo "Admin: http://13.205.187.75/admin/"
+                    echo "Admin: admin@nqobileq.com / admin123"
+                    echo "=========================================="
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '🎉 DEPLOYMENT SUCCESSFUL! 🎉'
+        }
+        failure {
+            echo '❌ DEPLOYMENT FAILED!'
+            sh 'docker-compose logs --tail=30'
+        }
+    }
+}

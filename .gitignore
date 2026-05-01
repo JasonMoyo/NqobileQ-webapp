@@ -1,0 +1,52 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Stripe keys
+stripe-keys.txt
+
+stripe-php/
+
+# PHP dependencies
+/vendor/
+composer.phar
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+error_log
+access_log
+
+# Database backups (keep init.sql)
+*.sql.gz
+*.sql.zip
+/backups/
+
+# Uploads directory
+/uploads/
+!/uploads/.gitkeep
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# AWS keys
+*.pem
+*.key
+*.p12
+
+# Temp files
+*.tmp
+*.cache

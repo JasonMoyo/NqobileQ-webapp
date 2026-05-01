@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Thank You | NqobileQ</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            background-color: #111;
+            color: #fff;
+            text-align: center;
+            padding: 8rem 2rem;
+            font-family: -apple-system, sans-serif;
+        }
+
+        .thank-you {
+            max-width: 600px;
+            margin: auto;
+            padding: 3rem;
+            background-color: var(--snd-bg-color);
+            border: 2px solid var(--main-color);
+            border-radius: 1.5rem;
+            box-shadow: 0 0 10px var(--main-color);
+        }
+
+        .thank-you h1 {
+            font-size: 4rem;
+            color: var(--main-color);
+            margin-bottom: 1.5rem;
+        }
+
+        .thank-you p {
+            font-size: 1.8rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            font-size: 1.6rem;
+            font-weight: bold;
+            background-color: var(--main-color);
+            color: #000;
+            border-radius: 1rem;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+            margin: 10px;
+        }
+
+        .btn:hover {
+            background-color: #009688;
+            color: #000;
+            box-shadow: 0 0 15px var(--main-color);
+        }
+        
+        .btn-wa {
+            background-color: #25D366;
+            color: white;
+        }
+        
+        .btn-wa:hover {
+            background-color: #128C7E;
+        }
+    </style>
+</head>
+<body>
+    <div class="thank-you">
+        <h1>🎉 Thank You!</h1>
+        <p>Your submission was successful. We'll be in touch with you soon.</p>
+        
+        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+            <a href="index.php" class="btn">🏠 Back to Home</a>
+            <a href="https://wa.me/+27782280408" target="_blank" class="btn btn-wa">📱 WhatsApp Us</a>
+            <a href="tel:+27782280408" class="btn">📞 Call Now</a>
+        </div>
+    </div>
+    <!-- Emergency link fix - forces all links to work -->
+<script>
+setTimeout(function() {
+    document.querySelectorAll('a').forEach(function(link) {
+        var href = link.getAttribute('href');
+        if (!href) return;
+        
+        var newLink = document.createElement('a');
+        newLink.href = href;
+        newLink.innerHTML = link.innerHTML;
+        newLink.className = link.className;
+        newLink.style.cssText = link.style.cssText;
+        
+        Array.from(link.attributes).forEach(function(attr) {
+            if (attr.name !== 'href' && attr.name !== 'onclick') {
+                newLink.setAttribute(attr.name, attr.value);
+            }
+        });
+        
+        if (href.includes('wa.me') || href.includes('whatsapp')) {
+            newLink.setAttribute('target', '_blank');
+            newLink.setAttribute('rel', 'noopener noreferrer');
+        }
+        
+        link.parentNode.replaceChild(newLink, link);
+    });
+    
+    console.log('✅ Emergency link fix applied to thank you page');
+}, 500);
+</script>
+</body>
+</html>
