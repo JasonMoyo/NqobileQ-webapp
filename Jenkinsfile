@@ -1,11 +1,10 @@
 pipeline {
-    // Run directly on the agent (not via SSH)
     agent { label 'docker-agent' }
 
     environment {
         APP_NAME = 'nqobileq'
         
-        // Jenkins Credentials (Add these in Jenkins UI)
+        // Jenkins Credentials
         SMTP_USERNAME = credentials('smtp-username')
         SMTP_PASSWORD = credentials('smtp-password')
         OWNER_EMAIL = credentials('owner-email')
@@ -21,15 +20,17 @@ pipeline {
     }
 
     stages {
-        stage('Checkout Code') {
+        // STAGE 1: Clone Repository
+        stage('Clone Repository') {
             steps {
-                echo '📦 Checking out code...'
+                echo '📦 Cloning code from GitHub...'
                 git url: 'https://github.com/JasonMoyo/NqobileQ-webapp.git', branch: 'main'
-                echo '✅ Code checked out'
+                echo '✅ Code cloned successfully'
             }
         }
 
-        stage('Create .env File') {
+        // STAGE 2: Create Environment File
+        stage('Create Environment File') {
             steps {
                 echo '🔧 Creating .env file...'
                 writeFile file: '.env', text: """DB_HOST=db
@@ -49,97 +50,88 @@ OWNER_EMAIL=${OWNER_EMAIL}
 STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
 """
-                sh 'echo "✅ .env created"'
+                echo '✅ .env file created'
             }
         }
 
-        stage('Update Stripe Config') {
+        // STAGE 3: Configure Stripe
+        stage('Configure Stripe') {
             steps {
-                echo '🔧 Updating Stripe config...'
+                echo '💳 Configuring Stripe...'
                 sh """
                     if [ -f stripe-config.php ]; then
                         sed -i 's|http://YOUR_EC2_PUBLIC_IP|http://${AGENT_IP}|g' stripe-config.php
-                        echo "✅ Stripe config updated"
-                    else
-                        echo "⚠️ stripe-config.php not found"
+                        echo "✅ Stripe configured"
                     fi
                 """
             }
         }
 
-        stage('Copy to Application Directory') {
+        // STAGE 4: Copy to Application Directory
+        stage('Copy to App Directory') {
             steps {
                 echo '📁 Copying files to application directory...'
                 sh """
                     mkdir -p ${AGENT_PATH}
-                    cp -r * ${AGENT_PATH}/ || true
+                    cp -r * ${AGENT_PATH}/ 2>/dev/null || true
                     cp -r .[!.]* ${AGENT_PATH}/ 2>/dev/null || true
-                    cd ${AGENT_PATH}
-                    ls -la
+                    echo "✅ Files copied to ${AGENT_PATH}"
                 """
             }
         }
 
-        stage('Deploy with Docker Compose') {
+        // STAGE 5: Build Docker Images
+        stage('Build Docker Images') {
             steps {
-                echo '🐳 Deploying with Docker Compose...'
+                echo '🐳 Building Docker images...'
                 sh """
                     cd ${AGENT_PATH}
-                    
-                    # Stop old containers
-                    docker-compose down 2>/dev/null || true
-                    
-                    # Build and start
                     docker-compose build --no-cache
-                    docker-compose up -d
-                    
-                    echo "Waiting for containers to start..."
-                    sleep 15
-                    
-                    # Show running containers
-                    docker-compose ps
+                    echo "✅ Docker images built"
                 """
             }
         }
 
+        // STAGE 6: Start Containers
+        stage('Start Containers') {
+            steps {
+                echo '🚀 Starting Docker containers...'
+                sh """
+                    cd ${AGENT_PATH}
+                    docker-compose down 2>/dev/null || true
+                    docker-compose up -d
+                    echo "✅ Containers started"
+                """
+            }
+        }
+
+        // STAGE 7: Initialize Database
         stage('Initialize Database') {
             steps {
                 echo '🗄️ Initializing database...'
                 sh """
                     cd ${AGENT_PATH}
-                    # Wait for MySQL to be ready
                     sleep 10
-                    
-                    # Run init script
-                    docker exec -i nqobileq_db mysql -uroot -p${DB_ROOT_PASSWORD} nqobileq_db < init.sql 2>/dev/null || echo "Database already initialized or continuing..."
-                    
-                    # Copy .env to web container
+                    docker exec -i nqobileq_db mysql -uroot -p${DB_ROOT_PASSWORD} nqobileq_db < init.sql 2>/dev/null || echo "DB already initialized"
                     docker cp .env nqobileq_web:/var/www/html/.env 2>/dev/null || true
-                    
-                    echo "✅ Database initialization complete"
+                    echo "✅ Database ready"
                 """
             }
         }
 
+        // STAGE 8: Verify Deployment
         stage('Verify Deployment') {
             steps {
                 echo '🔍 Verifying deployment...'
                 sh """
                     echo "=========================================="
                     echo "Testing website..."
-                    curl -s -f http://localhost:80 > /dev/null && echo "✅ Website is running" || echo "⚠️ Website may not be ready"
-                    
-                    echo "Testing phpMyAdmin..."
-                    curl -s -f http://localhost:8081 > /dev/null && echo "✅ phpMyAdmin is running" || echo "⚠️ phpMyAdmin may not be ready"
-                    
+                    curl -s -f http://localhost:80 > /dev/null && echo "✅ Website is running"
                     echo "=========================================="
-                    echo "✅ NQOBILEQ DEPLOYMENT SUCCESSFUL!"
+                    echo "✅ DEPLOYMENT SUCCESSFUL!"
                     echo "=========================================="
                     echo "Website: http://${AGENT_IP}"
-                    echo "phpMyAdmin: http://${AGENT_IP}:8081"
-                    echo ""
-                    echo "Admin Login: admin@nqobileq.com / admin123"
-                    echo "Test Stripe Card: 4242 4242 4242 4242"
+                    echo "Admin: admin@nqobileq.com / admin123"
                     echo "=========================================="
                 """
             }
@@ -148,14 +140,14 @@ STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
 
     post {
         success {
-            echo '🎉 DEPLOYMENT SUCCESSFUL! 🎉'
+            echo '🎉 PIPELINE COMPLETED SUCCESSFULLY! 🎉'
         }
         failure {
-            echo '❌ DEPLOYMENT FAILED!'
-            sh 'docker-compose logs --tail=50 2>/dev/null || true'
+            echo '❌ PIPELINE FAILED!'
+            sh 'docker-compose logs --tail=30 2>/dev/null || true'
         }
         always {
-            echo '🧹 Cleaning up...'
+            echo '🧹 Cleanup...'
             sh 'docker system prune -f 2>/dev/null || true'
         }
     }
