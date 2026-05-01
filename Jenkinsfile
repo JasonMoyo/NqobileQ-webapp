@@ -1,6 +1,14 @@
 pipeline {
     agent { label 'docker-agent' }
 
+    triggers {
+        // Automatically build when GitHub receives a push
+        githubPush()
+        
+        // Backup: Check for changes every 5 minutes (optional)
+        pollSCM('H/5 * * * *')
+    }
+
     environment {
         APP_NAME = 'nqobileq'
         
@@ -20,16 +28,17 @@ pipeline {
     }
 
     stages {
-        // STAGE 1: Clone Repository
         stage('Clone Repository') {
             steps {
                 echo '📦 Cloning code from GitHub...'
                 git url: 'https://github.com/JasonMoyo/NqobileQ-webapp.git', branch: 'main'
                 echo '✅ Code cloned successfully'
+                
+                // Show what changed (optional)
+                sh 'git log -1 --oneline'
             }
         }
 
-        // STAGE 2: Create Environment File
         stage('Create Environment File') {
             steps {
                 echo '🔧 Creating .env file...'
@@ -70,7 +79,6 @@ stage('Verify Composer Dependencies') {
     }
 }
 
-        // STAGE 3: Configure Stripe
         stage('Configure Stripe') {
             steps {
                 echo '💳 Configuring Stripe...'
@@ -83,7 +91,6 @@ stage('Verify Composer Dependencies') {
             }
         }
 
-        // STAGE 4: Copy to Application Directory
         stage('Copy to App Directory') {
             steps {
                 echo '📁 Copying files to application directory...'
@@ -96,7 +103,6 @@ stage('Verify Composer Dependencies') {
             }
         }
 
-        // STAGE 5: Build Docker Images
         stage('Build Docker Images') {
             steps {
                 echo '🐳 Building Docker images...'
@@ -108,7 +114,6 @@ stage('Verify Composer Dependencies') {
             }
         }
 
-        // STAGE 6: Start Containers
         stage('Start Containers') {
             steps {
                 echo '🚀 Starting Docker containers...'
@@ -121,7 +126,6 @@ stage('Verify Composer Dependencies') {
             }
         }
 
-        // STAGE 7: Initialize Database
         stage('Initialize Database') {
             steps {
                 echo '🗄️ Initializing database...'
@@ -135,7 +139,6 @@ stage('Verify Composer Dependencies') {
             }
         }
 
-        // STAGE 8: Verify Deployment
         stage('Verify Deployment') {
             steps {
                 echo '🔍 Verifying deployment...'
@@ -156,11 +159,11 @@ stage('Verify Composer Dependencies') {
 
     post {
         success {
-            echo '🎉 PIPELINE COMPLETED SUCCESSFULLY! 🎉'
+            echo '🎉 PIPELINE TRIGGERED BY GITHUB PUSH - DEPLOYMENT SUCCESSFUL! 🎉'
         }
         failure {
             echo '❌ PIPELINE FAILED!'
-            sh 'docker-compose logs --tail=30 2>/dev/null || true'
+            sh 'cd ${AGENT_PATH} && docker-compose logs --tail=30 2>/dev/null || true'
         }
         always {
             echo '🧹 Cleanup...'
