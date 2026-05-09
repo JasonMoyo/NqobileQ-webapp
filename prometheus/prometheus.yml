@@ -1,0 +1,80 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: production
+    project: nqobileq
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files for alerts
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # NqobileQ Web Application (custom metrics)
+  - job_name: 'nqobileq_web'
+    metrics_path: '/metrics.php'
+    static_configs:
+      - targets: ['web:80']
+    params:
+      format: ['prometheus']
+
+  # Node Exporter (Server metrics)
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['node_exporter:9100']
+
+  # MySQL Exporter (Database metrics)
+  - job_name: 'mysql_exporter'
+    static_configs:
+      - targets: ['mysql_exporter:9104']
+
+  # Blackbox Exporter (Uptime monitoring)
+  - job_name: 'blackbox_http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://web:80
+          - http://web:80/stripe-checkout.php
+          - http://web:80/login.php
+          - http://web:80/register.php
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox_exporter:9115
+
+  # Cadvisor (Docker container metrics)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # phpMyAdmin monitoring
+  - job_name: 'phpmyadmin'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ['http://phpmyadmin:80']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox_exporter:9115

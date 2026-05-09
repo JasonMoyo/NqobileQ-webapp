@@ -1,0 +1,156 @@
+groups:
+  - name: nqobileq_alerts
+    interval: 30s
+    rules:
+      # ============================================
+      # APPLICATION ALERTS
+      # ============================================
+      
+      - alert: NqobileQWebsiteDown
+        expr: probe_success{job="blackbox_http"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: nqobileq
+        annotations:
+          summary: "NqobileQ website is down!"
+          description: "The website has been unreachable for {{ $value }} seconds."
+
+      - alert: HighErrorRate
+        expr: |
+          (sum(rate(http_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(http_requests_total[5m]))) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: nqobileq
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }}% for the last 5 minutes."
+
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: nqobileq
+        annotations:
+          summary: "Slow response time detected"
+          description: "95th percentile response time is {{ $value }} seconds."
+
+      # ============================================
+      # DATABASE ALERTS
+      # ============================================
+      
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "MySQL database is down"
+          description: "The MySQL database has been unreachable for 1 minute."
+
+      - alert: HighMySQLConnections
+        expr: mysql_global_status_threads_connected > 150
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High MySQL connections"
+          description: "MySQL has {{ $value }} active connections."
+
+      - alert: SlowMySQLQueries
+        expr: mysql_global_status_slow_queries > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Slow queries detected"
+          description: "{{ $value }} slow queries in the last 5 minutes."
+
+      # ============================================
+      # SERVER ALERTS
+      # ============================================
+      
+      - alert: HighCPUUsage
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: server
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% for the last 10 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          service: server
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% for the last 10 minutes."
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: critical
+          service: server
+        annotations:
+          summary: "Low disk space"
+          description: "Only {{ $value }}% disk space remaining on root partition."
+
+      # ============================================
+      # BUSINESS METRICS ALERTS
+      # ============================================
+      
+      - alert: LowBookingVolume
+        expr: nqobileq_bookings_today < 5
+        for: 12h
+        labels:
+          severity: info
+          service: business
+        annotations:
+          summary: "Low booking volume"
+          description: "Only {{ $value }} bookings today. Below target."
+
+      - alert: StripePaymentFailure
+        expr: nqobileq_stripe_success_rate < 80
+        for: 30m
+        labels:
+          severity: warning
+          service: payment
+        annotations:
+          summary: "High Stripe payment failure rate"
+          description: "Payment success rate is only {{ $value }}%."
+
+      # ============================================
+      # DOCKER CONTAINER ALERTS
+      # ============================================
+      
+      - alert: ContainerDown
+        expr: time() - container_last_seen > 60
+        for: 1m
+        labels:
+          severity: critical
+          service: docker
+        annotations:
+          summary: "Container is down"
+          description: "Container {{ $labels.name }} has been down for 1 minute."
+
+      - alert: ContainerRestarting
+        expr: rate(container_start_time_seconds[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container restarting"
+          description: "Container {{ $labels.name }} has restarted {{ $value }} times."

@@ -20,6 +20,8 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
       retries: 10
+    networks:
+      - nqobileq_network
 
   web:
     build: .
@@ -49,6 +51,8 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - OWNER_PHONE=${OWNER_PHONE}
       - OWNER_EMAIL=${OWNER_EMAIL}
+    networks:
+      - nqobileq_network
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
@@ -64,7 +68,125 @@ services:
       UPLOAD_LIMIT: 100M
     depends_on:
       - db
+    networks:
+      - nqobileq_network
+
+  # ============================================
+  # PROMETHEUS & GRAFANA MONITORING STACK
+  # ============================================
+
+  # Prometheus - Metrics Collection Server
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nqobileq_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - nqobileq_network
+    depends_on:
+      - web
+
+  # Grafana - Visualization Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nqobileq_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    depends_on:
+      - prometheus
+    networks:
+      - nqobileq_network
+
+  # Node Exporter - Server Metrics (CPU, Memory, Disk, Network)
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: nqobileq_node_exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - nqobileq_network
+
+  # MySQL Exporter - Database Metrics
+  mysql_exporter:
+    image: prom/mysqld-exporter:latest
+    container_name: nqobileq_mysql_exporter
+    restart: unless-stopped
+    ports:
+      - "9104:9104"
+    environment:
+      - DATA_SOURCE_NAME=root:${DB_ROOT_PASSWORD}@(db:3306)/
+    networks:
+      - nqobileq_network
+    depends_on:
+      - db
+
+  # Blackbox Exporter - Uptime and Endpoint Monitoring
+  blackbox_exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: nqobileq_blackbox
+    restart: unless-stopped
+    ports:
+      - "9115:9115"
+    networks:
+      - nqobileq_network
+
+  # Cadvisor - Docker Container Metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: nqobileq_cadvisor
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - nqobileq_network
 
 volumes:
   db_data:
     name: nqobileq_mysql_data
+  prometheus_data:
+    name: nqobileq_prometheus_data
+  grafana_data:
+    name: nqobileq_grafana_data
+
+networks:
+  nqobileq_network:
+    name: nqobileq_network
+    driver: bridge
