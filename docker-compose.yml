@@ -135,20 +135,6 @@ services:
     networks:
       - nqobileq_network
 
-  # MySQL Exporter - Database Metrics
-  mysql_exporter:
-    image: prom/mysqld-exporter:latest
-    container_name: nqobileq_mysql_exporter
-    restart: unless-stopped
-    ports:
-      - "9104:9104"
-    environment:
-      - DATA_SOURCE_NAME=root:${DB_ROOT_PASSWORD}@(db:3306)/
-    networks:
-      - nqobileq_network
-    depends_on:
-      - db
-
   # Blackbox Exporter - Uptime and Endpoint Monitoring
   blackbox_exporter:
     image: prom/blackbox-exporter:latest

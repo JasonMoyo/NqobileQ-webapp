@@ -1,0 +1,35 @@
+# User Metrics
+nqobileq_users_total
+
+# Booking Metrics
+nqobileq_bookings_total
+nqobileq_bookings_today
+sum_over_time(nqobileq_bookings_today[7d])
+
+# Payment Metrics
+nqobileq_payments_pending
+nqobileq_payments_successful
+nqobileq_packages_total
+nqobileq_stripe_success_rate
+
+# Revenue Metrics
+nqobileq_revenue_total_cents / 100
+nqobileq_revenue_today_cents / 100
+
+# Inquiry Metrics
+nqobileq_inquiries_total
+nqobileq_inquiries_new_today
+
+# System Health
+nqobileq_health
+nqobileq_db_connected
+nqobileq_db_query_time_ms
+
+# Server CPU
+100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+# Server Memory
+(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+# Server Disk
+(node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_free_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} * 100
